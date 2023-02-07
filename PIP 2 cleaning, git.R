@@ -5,15 +5,18 @@ library(tidyverse)
 library(dplyr)
 library(readr)
 
+# Organization  - READ before running the script  -----------------------------------------
 getwd()
-setwd("C:\\Users\\Diana\\OneDrive - University Of Massachusetts Medical School\\Documents\\R\\R working directory\\PIP_R")
+# All cleaning results files should be stored in "Clinical results" folder, by date" 
+# "C:\Users\Diana\OneDrive - University Of Massachusetts Medical School\FMCH\PIP, Dan Mullin\DATA\Analysi and cleaning\Cleaning results"
+# Analyzis code is taking files from there. 
 
 # Step 1. reading the file as it came from Qx. 
-pip<- as_tibble (read_csv("C:\\Users\\Diana\\OneDrive - University Of Massachusetts Medical School\\FMCH\\PIP, Dan Mullin\\Qualtrics data\\downloaded\\2022\\11.10.22\\PIP2.0, LABLES, 11.10.22.csv"))
+pip<- as_tibble (read_csv("C:\\Users\\Diana\\OneDrive - University Of Massachusetts Medical School\\FMCH\\PIP, Dan Mullin\\DATA\\downloaded\\2023\\PIP.download.Jan.03.2023_labels.csv"))
 
 #Step 2. saving data dictionary 
 Dict <- as.data.frame(cbind(colnames(pip), as.character(pip[1,]))) #Variable names are in column names, codebook is in first row
-write.csv(Dict, "PIP3hDataDict.csv")
+write.csv(Dict, "temp.dictionary.csv")
 
 #Step 3. Saving the dataset with correctly identified data types.
 temp.file <- pip[-(1:2),] # this makes all variables as character vars. 
@@ -22,14 +25,12 @@ temp.file.2 <- read_csv("temp.file.csv") #let dplyr be smart by importing short 
 temp.file.2 <- subset(temp.file.2, select = -c(`...1`) )
 pip<-temp.file.2
 
-  colnames(pip)
-  str(pip)
-  head(pip)
-  dim(pip)
- 
-  str(temp.file.2)
-  
-   # Data formatting  -----------------------------------------
+#   colnames(pip)
+#   str(pip)
+#   head(pip)
+#   dim(pip)
+
+# Data formatting  -----------------------------------------
   
   #1. Renaming  inconvenient variables 
   pip <-pip %>%
@@ -231,14 +232,12 @@ s.11 <- nrow(pip.11)
 
 
 # pip.11$Progress =100
-
-table(pip.11$Progress)
 pip.12<-pip.11 %>%
   filter (Progress == 100) 
 s.12<- nrow(pip.12)
 
 
-  final_numbers <- c(s.0, s.1, s.2, s.3, s.4, s.5,s.6, s.7, s.8, s.9, s.10, s.11, s.12)
+  final_numbers <- c(s.0, s.1, s.2, s.3, s.4, s.5, s.6, s.7, s.8, s.9, s.10, s.11, s.12)
   final_labels <- c("raw", "step 1", "step 2", "step 3", "step 4", "step 5", "step 6","step 7","step 8","step 9","step 10","step 11","step 12" )
   
   report.pip <- data.frame (final_labels,
@@ -297,7 +296,7 @@ s.12<- nrow(pip.12)
 # Group IDs  -adding old (previously manually identified):  -----------------------------------------
  
   
-  pip.cleaned.ids<- as_tibble (read_csv("C:\\Users\\Diana\\OneDrive - University Of Massachusetts Medical School\\FMCH\\PIP, Dan Mullin\\Qualtrics data\\Analysi and cleaning\\PIP.all recds.handcleaned TO KEEP  DR and  DM, 10.20.22.csv"))  
+  pip.cleaned.ids<- as_tibble (read_csv("PIP.all recds.handcleaned TO KEEP  DR and  DM, 10.20.22.csv"))  
   
   # pip.cleaned.ids <- subset(pip.cleaned.ids, select = -c(email, count) )
 
@@ -306,24 +305,16 @@ s.12<- nrow(pip.12)
 pip.new.id <-pip.12 %>%
         left_join (pip.cleaned.ids, c( "ResponseId" ="ResponseId"))
 
-#Now removing old group Id, that was changed during manual cleanup: 
-  # pip.new.id <- subset(pip.new.id, select = -c(`group.id.x`, `p.name.x`) )  - update: there are no old group_IDs     
-  
-# pip.new.id <-pip.new.id  %>%
-    # rename(group.id = `group.id.y`, 
-           # p.name =`p.name.y`)
-  
 # New records - group IDs  -----------------------------------------
-# # new.records <- pip.new.id %>%
-#       filter(is.na(group.id))
-# new.records$p.name  <-  ifelse (is.na(new.records$`ExternalReference`), new.records$pr.name, new.records$ExternalReference)
-# new.records$p.name  <-  ifelse (is.na(new.records$p.name ), paste(new.records$pr.group, new.records$pr.group.other, sep=" "), new.records$p.name )
-# # new.records<- select (new.records, p.name, ResponseId)
-# # # To see better how these two lines work:
-# # (new.records <- select (new.records,date, p.name, ExternalReference, pr.name, pr.group, pr.group.other,  ResponseId ))
-# 
-#  (select (new.records, group.id, date, p.name ))
-#
+#### View only new records   -----------------------------------------
+new.records <- pip.new.id %>%
+      filter(is.na(group.id))%>%
+      select (`date`, `ResponseId`, `RecipientFirstName`, `RecipientFirstName`,`ExternalReference`, pr.name, pr.group,pr.group.other, p.name, everything() )
+
+#### Populating p.name for new records   -----------------------------------------
+new.records$p.name  <-  ifelse (is.na(new.records$`ExternalReference`), new.records$pr.name, new.records$ExternalReference)
+new.records$p.name  <-  ifelse (is.na(new.records$p.name ), paste(new.records$pr.group, new.records$pr.group.other, sep=" "), new.records$p.name )
+
 
 pip.new.id <-pip.new.id%>% 
         arrange(group.id)
@@ -339,7 +330,7 @@ pip.new.id$group.id[186]
 pip.new.id$p.name  <-  ifelse (is.na(pip.new.id$p.name), pip.new.id$ExternalReference, pip.new.id$p.name)
 pip.new.id$p.name  <-  ifelse (is.na(pip.new.id$p.name), pip.new.id$pr.name, pip.new.id$p.name)
 pip.new.id$p.name  <-  ifelse (is.na(pip.new.id$p.name), paste(groups$pr.group, groups$pr.group.other, sep=" "), pip.new.id$p.name)
-# chewcking if code worked correctly
+# checking if code worked correctly
 # pip.new.id<- pip.new.id[170:186,]
 # a<-select(pip.new.id, group.id, p.name, `ExternalReference`, `pr.name`,`pr.group`, `pr.group.other` )
 pip.new.id$p.name[121:122]
