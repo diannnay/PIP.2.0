@@ -4,6 +4,8 @@
 library(tidyverse)
 library(dplyr)
 library(readr)
+library(lubridate)
+library(tibble)
 
 # Organization  - READ before running the script  -----------------------------------------
 getwd()
@@ -16,13 +18,13 @@ pip<- as_tibble (read_csv("C:\\Users\\Diana\\OneDrive - University Of Massachuse
 
 #Step 2. saving data dictionary 
 Dict <- as.data.frame(cbind(colnames(pip), as.character(pip[1,]))) #Variable names are in column names, codebook is in first row
-write.csv(Dict, "temp.dictionary.csv")
+write_csv(Dict, "temp.dictionary.csv")
 
 #Step 3. Saving the dataset with correctly identified data types.
 temp.file <- pip[-(1:2),] # this makes all variables as character vars. 
-write.csv(temp.file,"temp.file.csv") #write the short dataframe. 
+write_csv(temp.file,"temp.file.csv") #write the short dataframe. 
 temp.file.2 <- read_csv("temp.file.csv") #let dplyr be smart by importing short dataframe again and identifying  the correct variable types. 
-temp.file.2 <- subset(temp.file.2, select = -c(`...1`) )
+# temp.file.2 <- subset(temp.file.2, select = -c(`...1`) )
 pip<-temp.file.2
 
 #   colnames(pip)
@@ -247,248 +249,168 @@ s.12<- nrow(pip.12)
   
   # write.csv (pip.11, file = "C:\\Users\\Diana\\OneDrive - University Of Massachusetts Medical School\\FMCH\\PIP, Dan Mullin\\Qualtrics data\\Analysi and cleaning\\Cleaning results\\9.14.22\\PIP.Cleaned data(R).DR,9.14.22.csv")    
   
-  #_____________________ END   OF CLEANING SCRIPT ____________________
+#_____________________ END   OF CLEANING SCRIPT ____________________
   
   
-  # Unique practices-DONE  -----------------------------------------
   
-  
-  #### p.name column for all records is summative of External reference,  practice name,pactice name _other ,  practice group, practice group_other. 
-  
-  # This whole section is for identifying unique records. Once its done, document is saved and re-used for future pulls.  The secion is commented out. 
+# I. Adding manually identified group.id to all records:  -----------------------------------------
  
-  # filling External Reference column with practice names, when empty:
-#  
-#   groups <-pip.12
-# #   
-#   groups$p.name  <-  ifelse (is.na(groups$p.name), groups$pr.name, groups$ExternalReference)
-#   groups$p.name  <-  ifelse (is.na(groups$p.name ), paste(groups$pr.group, groups$pr.group.other, sep=" "), groups$p.name )
-#   groups <- select (groups, ExternalReference, pr.name, p.name, email, ResponseId )
-#   
-#  
-#   
-#   # Group.summary has group IDs based on external reference name and practice name
-#   groups.summary <-groups %>%
-#     group_by (p.name)%>%
-#     summarise (name.count = n())
-#   
-#   groups.summary<- transform (groups.summary, group.id = as.numeric(factor(p.name))) # CREATING `GROUP.ID` here 
-#   
-#   groups <-groups %>%
-#     left_join (groups.summary, c( "p.name" ="p.name"))
-#    groups <- select (groups, p.name, email, ResponseId,group.id )
-#   
-#   unique.practices <-groups %>%
-#     group_by (p.name, group.id)%>%
-#     summarise (count = n())
-#   write.csv (unique.practices, file = "C:\\Users\\Diana\\OneDrive - University Of Massachusetts Medical School\\FMCH\\PIP, Dan Mullin\\Qualtrics data\\Analysi and cleaning\\Cleaning results\\10.7.22 for manual cleaning\\PIP.summary.BEfFORE manual cleaning, DR, 10.12.22.csv") - #why am i exporting it? to be able to compare for after hand cleaning 
-#   
-#   # To export for manual cleaning: 
-# pip.all.record <-groups %>%
-#     group_by (p.name, email,ResponseId, group.id)%>%
-#     summarise (count = n())
-#   write.csv (pip.all.record, file = "C:\\Users\\Diana\\OneDrive - University Of Massachusetts Medical School\\FMCH\\PIP, Dan Mullin\\Qualtrics data\\Analysi and cleaning\\Cleaning results\\10.7.22 for manual cleaning\\PIP.all recds. FOR manual cleaning, DR, 10.14.22.csv")    
-#   
-# Manual cleaning
-# Make sure each group id connected with record ID
+cleaned.ids<- as_tibble (read_csv("PIP.all recds.handcleaned TO KEEP  DR and  DM, 10.20.22.csv"))  
+# pip.cleaned.ids <- subset(pip.cleaned.ids, select = -c(email, count) )
+colnames(cleaned.ids) 
   
+   cleaned.ids.1<- cleaned.ids%>%
+    select(group.id, p.name, ResponseId) 
+
+# shortening p.12 data for easy checking
+     main.short<- pip.12  
+     # %>%
+      # select(ResponseId, ExternalReference , pr.name,pr.group, pr.group.other, date, `RecipientFirstName`, `RecipientLastName`)
+
+# Adding group_IDs to all records: 
+     main.short <-main.short %>%
+     left_join (cleaned.ids.1, c( "ResponseId" ="ResponseId"))  
+  # added 2 new variables: group.id and p.name. New records are still missing  group id and p.name 
+
+     main.short$group.id
+
+# II.  # New records   ----------------------------------------- 
+     ## Generating p.name for all records including new   -----------------------------------------  
+      
+main.short$p.name  <-  ifelse (is.na(main.short$`ExternalReference`), main.short$pr.name, main.short$ExternalReference)
+main.short$p.name  <-  ifelse (is.na(main.short$p.name ), paste(main.short$pr.group, main.short$pr.group.other, sep=" "), main.short$p.name )
+main.short$p.name  <-  ifelse (is.na(main.short$p.name), paste(main.short$pr.group, main.short$pr.group.other, sep=" "), main.short$p.name)
+      
   
-# Group IDs  -adding old (previously manually identified):  -----------------------------------------
- 
+    ## Assigning IDs from previously existing external reference  ----------------------------------------
+
+ext.ref.list.exist<- main.short %>%
+  filter(!is.na(ExternalReference) & !is.na(group.id) )%>% 
+  group_by(ExternalReference, group.id)%>%
+  select ( group.id, ExternalReference)%>%
+    filter(row_number()==1)
+
+  main.short<- main.short%>%
+      left_join (ext.ref.list.exist,c("ExternalReference" ="ExternalReference"))%>%
+      rename (ex.ref.group.id = group.id.y, 
+                    group.id = group.id.x)
   
-  pip.cleaned.ids<- as_tibble (read_csv("PIP.all recds.handcleaned TO KEEP  DR and  DM, 10.20.22.csv"))  
+main.short$group.id
+main.short$ex.ref.group.id
   
-  # pip.cleaned.ids <- subset(pip.cleaned.ids, select = -c(email, count) )
+  for (i in 1:length(main.short$group.id)) {
+    if (is.na(main.short$group.id[i]  & !is.na(main.short$ex.ref.group.id[i]) )) {
+      main.short$group.id[i]<- main.short$ex.ref.group.id[i]
+                                            }
+                                        }
+main.short<- subset(main.short , select = -c(`ex.ref.group.id`) )
+colnames(main.short)
+   
+  ## New IDS for new ExternalReference group   -----------------------------------------
+ext.ref.list<- main.short %>%
+    filter(!is.na(ExternalReference))%>% 
+    group_by(ExternalReference, group.id)%>%
+    select ( group.id, ExternalReference)%>%
+    filter(row_number()==1)
+  
+temp<-main.short %>%
+    arrange(group.id)%>%
+    filter(group.id<100000)
+main.short$group.id  
+temp$group.id
+  all.ids <- na.omit(unique(c(temp$group.id)))
 
   
-  # Adding corrected group_IDs to all records: 
-pip.new.id <-pip.12 %>%
-        left_join (pip.cleaned.ids, c( "ResponseId" ="ResponseId"))
+  for (i in 1:length(ext.ref.list$group.id)) {
+    if (is.na(ext.ref.list$group.id[i])) { 
+      new.id <- max(all.ids) + 1
+      ext.ref.list$group.id[i] <- new.id
+      all.ids <- append(all.ids, new.id)
+    }
+  } 
+  
+  main.short<- main.short%>%
+    left_join (ext.ref.list,c("ExternalReference" ="ExternalReference"))          %>%
+    rename (ex.ref.group.id = group.id.y, 
+            group.id = group.id.x)
+   
+  main.short$group.id
+  main.short$ex.ref.group.id
+  
+  for (i in 1:length(main.short$group.id)) {
+    if (is.na(main.short$group.id[i]  & !is.na(main.short$ex.ref.group.id[i]) )) {
+      main.short$group.id[i]<- main.short$ex.ref.group.id[i]
+    }
+  }
+   main.short<- subset(main.short , select = -c(`ex.ref.group.id`) )
+    colnames(main.short)
 
-# New records - group IDs  -----------------------------------------
-#### View only new records   -----------------------------------------
-new.records <- pip.new.id %>%
-      filter(is.na(group.id))%>%
-      select (`date`, `ResponseId`, `RecipientFirstName`, `RecipientFirstName`,`ExternalReference`, pr.name, pr.group,pr.group.other, p.name, everything() )
+# Creating new IDs for the rest of NAs    -----------------------------------------
 
-#### Populating p.name for new records   -----------------------------------------
-new.records$p.name  <-  ifelse (is.na(new.records$`ExternalReference`), new.records$pr.name, new.records$ExternalReference)
-new.records$p.name  <-  ifelse (is.na(new.records$p.name ), paste(new.records$pr.group, new.records$pr.group.other, sep=" "), new.records$p.name )
+for (i in 1:length(main.short$group.id)) {
+  if (is.na(main.short$group.id[i])) { 
+                  new.id <- max(all.ids) + 1
+                  main.short$group.id[i] <- new.id
+                  all.ids <- append(all.ids, new.id)
+                                        }
+}
+    #Final check: 
+main.short$group.id
 
 
-pip.new.id <-pip.new.id%>% 
-        arrange(group.id)
+#__________________________________END_____________________________________
 
-#Manually entering ID values for new records: 
-pip.new.id$group.id[170:186]
-pip.new.id$group.id[185]<-121
-pip.new.id$group.id[185]
-pip.new.id$group.id[186]<-122
-pip.new.id$group.id[186]
-
-# Fxing p.name
-pip.new.id$p.name  <-  ifelse (is.na(pip.new.id$p.name), pip.new.id$ExternalReference, pip.new.id$p.name)
-pip.new.id$p.name  <-  ifelse (is.na(pip.new.id$p.name), pip.new.id$pr.name, pip.new.id$p.name)
-pip.new.id$p.name  <-  ifelse (is.na(pip.new.id$p.name), paste(groups$pr.group, groups$pr.group.other, sep=" "), pip.new.id$p.name)
-# checking if code worked correctly
-# pip.new.id<- pip.new.id[170:186,]
-# a<-select(pip.new.id, group.id, p.name, `ExternalReference`, `pr.name`,`pr.group`, `pr.group.other` )
-pip.new.id$p.name[121:122]
 
 # One group per row                         
-groups.summary <- pip.new.id%>%
+groups.summary <- main.short%>%
   group_by (group.id)%>%
   summarise (count = n())
 
 # Groups with the names column : 
-groups.summary <- pip.new.id%>%
+groups.summary <- main.short%>%
   group_by (group.id, p.name  )%>%
   summarise (count = n())
 
 
-# Checking repeats by email: 
-#This section also commented out, as it was part of identifying uniqe practices 
-#                   # To see how many groups per each email: only some emails should have few groups in in (for Martha)
-#                         a <- pip.all.id %>%
-#                                   group_by (email, group.id )%>%
-#                                   summarise (count = n())
-#                         a <- subset( a, select = -c(count) )
-#                               
-#                   # To see email that have few IDs, I count IDs
-#                         emails.with.few.practices  <- a %>%
-#                                   group_by (email )%>%
-#                                   summarise (count.IDs = n( ))%>%
-#                                   filter(count.IDs>1)
-# # write.csv ( emails.with.few.practices , file = "C:\\Users\\Diana\\OneDrive - University Of Massachusetts Medical School\\FMCH\\PIP, Dan Mullin\\Qualtrics data\\Analysi and cleaning\\Cleaning results\\10.7.22 for manual cleaning\\PIP. emails.with.few.practices , DR, 10.7.22.csv")     # review manually, correcting manual document, re-import.
-# 
-# # Number of groups and records in each group:
-# group.summary.short  <- pip.all.id %>%
-#             group_by (group.id )%>%
-#             summarise (count = n())
+### All records:   -----------------------------------------
 
+dim(main.short)
 
-
-### all records:   -----------------------------------------
-#this dataset to use for averaging group scores. All records in each group are here
-dim(pip.new.id)
-
-write.csv (pip.new.id, file = "C:\\Users\\Diana\\OneDrive - University Of Massachusetts Medical School\\FMCH\\PIP, Dan Mullin\\Qualtrics data\\Analysi and cleaning\\Cleaning results\\11.17.22\\PIP.groups.all.csv") 
+write_csv (main.short, file = "PIP.all records.csv") 
 
 
 # One record per group: ---------------------------------
 
 ### by last date:   -----------------------------------------
-#This dataset only has one record per grpoup - last date. 
-pip.groups.Last<- pip.new.id %>%
+#This dataset only has one record per group - last date. 
+pip.groups.last<- main.short %>%
           group_by(group.id)%>%
           arrange(desc(date))%>%
           filter(row_number()==1)
 
-pip.groups.Last.summary <- pip.groups.Last%>%
+dim(pip.groups.last)
+pip.groups.last.summary <- pip.groups.last%>%
   group_by (group.id,p.name,`ResponseId`, date)%>%
   summarise (count = n())
 
 
-write.csv (pip.groups.Last, file = "C:\\Users\\Diana\\OneDrive - University Of Massachusetts Medical School\\FMCH\\PIP, Dan Mullin\\Qualtrics data\\Analysi and cleaning\\Cleaning results\\11.17.22\\PIP.groups.last.date.csv")  
+write_csv (pip.groups.last, file = "pip.last per group.csv")  
 
+# 
+# ### by first date:   -----------------------------------------
+# #This dataset only has one record per grpoup - last date. 
+# pip.groups.first<- pip.new.id %>%
+#   group_by(group.id)%>%
+#   arrange(date)%>%
+#   filter(row_number()==1)
+# 
+# pip.groups.first.summary <- pip.groups.first%>%
+#   group_by (group.id,p.name,`ResponseId`, date)%>%
+#   summarise (count = n())
+# 
+# 
+# write.csv (pip.groups.Last, file = "C:\\Users\\Diana\\OneDrive - University Of Massachusetts Medical School\\FMCH\\PIP, Dan Mullin\\Qualtrics data\\Analysi and cleaning\\Cleaning results\\11.17.22\\PIP.groups.first.date.csv")  
 
-### by first date:   -----------------------------------------
-#This dataset only has one record per grpoup - last date. 
-pip.groups.first<- pip.new.id %>%
-  group_by(group.id)%>%
-  arrange(date)%>%
-  filter(row_number()==1)
-
-pip.groups.first.summary <- pip.groups.first%>%
-  group_by (group.id,p.name,`ResponseId`, date)%>%
-  summarise (count = n())
-
-
-write.csv (pip.groups.Last, file = "C:\\Users\\Diana\\OneDrive - University Of Massachusetts Medical School\\FMCH\\PIP, Dan Mullin\\Qualtrics data\\Analysi and cleaning\\Cleaning results\\11.17.22\\PIP.groups.first.date.csv")  
-
-
-
-  
-
-
-
-
-
-# extra __ By email and IP address   -----------------------------------------
-   # creating base table for Master 
-  master <-pip.12 %>%
-    group_by (ExternalReference, pr.name, email)%>%
-    summarise (name.count = n())
-    # colnames(pip.12)
-    # By email address only,  >2 in a group 
-  pip.email.groups <-pip.12 %>%
-    group_by (email)%>%
-    summarise (email.count = n())%>%
-    filter (email.count>1)
-  
-  
-  
-  # By IP address,  >2 in a group 
-  pip.ip.groups <-pip.12 %>%
-    group_by (IPAddress, email)%>%
-    summarise (ip.count = n())%>%
-    filter (ip.count>1)
-
-  
-#this summary tells me how many repeating emails contain repeating ip addresses (when >1).  
-  pip.groups <-pip.email.groups %>%
-    full_join (pip.ip.groups, c( "email" ="email"))
-  
-  
-  ### By practice name   ----------------------------------------- 
-# approaching by practice name: 
-  
-  
-
-  ##### Exref IDs   -----------------------------------------   
-
-  
-
-      
- 
-  # Grouping and adding exref IDs.
-  pip.ex.ref <-pip.12 %>%
-        group_by (ExternalReference)%>%
-        summarise (ex.ref.count = n())
-  group.id <- transform (pip.ex.ref, group.id = as.numeric(factor(ExternalReference)))
-  
-  # Creating Master list. Adding exref. group IDs. 
-  master<- master %>%
-        left_join(group.id, c("ExternalReference" ="ExternalReference"))
-   
-  master<- master %>%
-     select (ExternalReference, pr.name, email, group.id )
-  
-  
-  str(master)
-  ##### Exref IDs   ----------------------------------------- 
-  
-  
-  # List of Practice names and emails , grouped: 
-  pip.pname <-pip.12 %>%
-    group_by (pr.name)%>%
-    summarise (name.count = n()) 
-  pname.id <- transform (pip.pname, pname.id = as.numeric(factor(pr.name)))
-  
-  master<- master %>%
-    left_join(pname.id , c("pr.name" ="pr.name"))
-  master<- master %>%
-    select (ExternalReference, pr.name, email, group.id, pname.id ) 
-  
-  
-  # NEED TO CONTNUE id NUMBERTING AFTER EX.REF.id TO PNAME.id, SO THEY DONT REPEAT 
-  
-  # Summarizing by IDs
-  
-  Gr.summary <-  master %>%
-    group_by (ExternalReference, group.id,pr.name, pname.id)%>%
-    summarise (count = n()) 
-  
   
   
   
